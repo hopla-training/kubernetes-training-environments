@@ -1,4 +1,4 @@
-# Quick 4 nodes Docker Swarm Mode Cluster using Vagrant and Virtualbox
+# Quick 3 nodes Kubernetes Cluster using Vagrant and Virtualbox
 
 ## This repository will create a working swarm mode cluster for quick deploying, demo and testing of your service and applications.
 
@@ -18,12 +18,11 @@
 3. This will create nodes defined in **config.yml** with latest Docker Engine installed (it is configurable on config.yml).
 
  Default node names:
-  * node1
-  * node2
-  * node3
-  * node4
+  * local-master
+  * local-worker1
+  * local-worker2
 
-4. Connect to nodes using vagrant as usual (**vagrant ssh node1**).
+4. Connect to nodes using vagrant as usual (**vagrant ssh local-master**).
 >NOTE:
 >
 >It could be useful to define simple alias:
