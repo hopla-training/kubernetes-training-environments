@@ -1,0 +1,138 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+require 'yaml'
+VAGRANT_ROOT = File.dirname(File.expand_path(__FILE__))
+
+
+class String
+    def black;          "\e[30m#{self}\e[0m" end
+    def red;            "\e[31m#{self}\e[0m" end
+    def cyan;           "\e[36m#{self}\e[0m" end
+end
+
+
+engine_version=''
+engine_mode='default'
+proxy = ''
+
+
+config = YAML.load_file(File.join(File.dirname(__FILE__), 'instances.local.yml'))
+
+base_box=config['environment']['base_box']
+base_box_version=config['environment']['base_box_version']
+
+boxes = config['boxes']
+
+boxes_hostsfile_entries=""
+
+########
+
+
+boxes.each do |box|
+  boxes_hostsfile_entries=boxes_hostsfile_entries+box['mgmt_ip'] + ' ' +  box['name'] + '\n'
+end
+
+#puts boxes_hostsfile_entries
+
+$update_hosts = <<SCRIPT
+    echo "127.0.0.1 localhost" >/etc/hosts
+    echo -e "#{boxes_hostsfile_entries}" |tee -a /etc/hosts
+SCRIPT
+
+puts '--------------------------------------------------------------------------------------------'
+
+puts ' KUBERNETES Vagrant Environment'
+
+puts '--------------------------------------------------------------------------------------------'
+
+
+$nfs_server = <<SCRIPT
+  DEBIAN_FRONTEND=noninteractive apt-get install -qq nfs-kernel-server
+  export mount_point=$1
+  export fs_type=$2
+  export disk=$3
+  mkdir -p ${mount_point}
+  mkfs.${fs_type} -f ${disk}
+  mount ${disk} ${mount_point}
+  chmod 777 -R ${mount_point}
+  [ $(grep -c ${disk} /etc/fstab) -eq 0 ] && echo "${disk} ${mount_point} xfs defaults 0 1" >> /etc/fstab
+  echo "${mount_point}  *(rw,sync,no_root_squash,no_subtree_check)" >>/etc/exports
+  exportfs -a
+SCRIPT
+
+Vagrant.configure(2) do |config|
+  if Vagrant.has_plugin?("vagrant-proxyconf")
+    if proxy != ''
+        puts " Using proxy"
+        config.proxy.http = proxy
+        config.proxy.https = proxy
+        config.proxy.no_proxy = "localhost,127.0.0.1"
+    end
+  end
+  config.vm.box = base_box
+  config.vm.box_version = base_box_version
+  boxes.each do |node|
+    config.vm.define node['name'] do |config|
+      config.vm.hostname = node['name']
+      config.vm.provider "virtualbox" do |v|
+        v.name = node['name']
+        v.customize ["modifyvm", :id, "--memory", node['mem']]
+        v.customize ["modifyvm", :id, "--cpus", node['cpu']]
+	      v.customize ["modifyvm", :id, "--macaddress1", "auto"]
+        v.customize ["modifyvm", :id, "--nictype1", "Am79C973"]
+        v.customize ["modifyvm", :id, "--nictype2", "Am79C973"]
+        v.customize ["modifyvm", :id, "--nictype3", "Am79C973"]
+        v.customize ["modifyvm", :id, "--nictype4", "Am79C973"]
+
+        v.customize ["modifyvm", :id, "--nicpromisc1", "allow-all"]
+        v.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+        v.customize ["modifyvm", :id, "--nicpromisc3", "allow-all"]
+        v.customize ["modifyvm", :id, "--nicpromisc4", "allow-all"]
+        v.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+        if node['role'] == "nfs-server"
+          data_disk_file = File.join(VAGRANT_ROOT, node['name'] + '-data.vdi')
+          unless File.exist?(data_disk_file)
+            # create [storage_size] GB disk on master nodes
+            v.customize ['createhd', '--filename', data_disk_file, '--size', node['storage_size'].to_i * 1024]
+          end
+          v.customize ['storageattach', :id, '--storagectl', 'SATA', '--port', 2, '--device', 0, '--type', 'hdd', '--medium', data_disk_file]
+        end
+
+
+      end
+
+      config.vm.network "private_network",
+        ip: node['mgmt_ip'],
+        virtualbox__intnet: true
+
+
+      config.vm.network "private_network",
+        ip: node['hostonly_ip']
+
+      # config.vm.network "public_network",
+      # bridge: ["enp4s0","wlp3s0","enp3s0f1","wlp2s0"],
+      # auto_config: true
+
+
+      config.vm.provision "shell", inline: <<-SHELL
+      systemctl disable apt-daily.service
+      systemctl disable apt-daily.timer
+      DEBIAN_FRONTEND=noninteractive apt-get update -qq
+      DEBIAN_FRONTEND=noninteractive apt-get install -qq chrony curl
+      timedatectl set-timezone Europe/Madrid
+      SHELL
+
+      config.vm.provision :shell, :inline => $update_hosts
+      if node['role'] == "nfs-server"
+        config.vm.provision "shell" do |s|
+          s.name       = "Add Extra Storage as NFS export"
+          s.inline     = $nfs_server
+          s.args       = [node['storage_mount'],node['storage_fstype'],node['storage_disk']]
+        end
+      end
+
+    end
+  end
+
+end

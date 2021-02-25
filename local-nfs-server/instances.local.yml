@@ -1,0 +1,15 @@
+environment:
+  base_box: "frjaraur/bionic64"
+  base_box_version: "1.1"
+
+boxes:
+- name: "local-nfs-server"
+  role: "nfs-server"
+  mgmt_ip: "10.10.10.20"
+  hostonly_ip: "192.168.56.20"
+  mem: "2048"
+  cpu: "1"
+  storage_size: "75"
+  storage_mount: "/data"
+  storage_fstype: "xfs"
+  storage_disk: "/dev/sdb"

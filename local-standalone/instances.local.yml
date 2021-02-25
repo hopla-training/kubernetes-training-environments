@@ -1,0 +1,13 @@
+environment:
+  domain: "lab.local"
+  base_box: "frjaraur/bionic64"
+  base_flavour: "debian" 
+  base_box_version: "1.1"
+  docker_engine_version: "5:18.09.4~3-0~ubuntu-xenial"
+
+boxes:
+- name: "standalone"
+  role: "standalone"
+  mgmt_ip: "10.10.10.10"
+  mem: "4048"
+  cpu: "2"

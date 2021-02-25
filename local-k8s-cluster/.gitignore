@@ -1,0 +1,4 @@
+.vagrant
+tmp_deploying_stage
+*.vdi
+
